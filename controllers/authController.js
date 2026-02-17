@@ -97,8 +97,10 @@ const forgotPasswordController = async (req,res)=>{
 
         const hashToken = crypto.createHash("sha256").update(rawToken).digest("hex")
 
+        const expireTime = new Date(Date.now()+15*60*1000)
+
         
-        await sql`UPDATE users SET reset_token=${hashToken} WHERE email=${currentUserEmail}`
+        await sql`UPDATE users SET reset_token=${hashToken},reset_token_expires_at=${expireTime} WHERE email=${currentUserEmail}`
 
         const url = `${process.env.BASE_FRONTEND_URL}/reset-password?token=${rawToken}`
         
@@ -156,17 +158,18 @@ const resetPasswordController = async (req,res)=>{
     try {
         const hashedToken = crypto.createHash("sha256").update(token).digest("hex")
         
-        const users = await sql`SELECT * FROM users where reset_token=${hashedToken}`
+        const users = await sql`SELECT * FROM users where reset_token=${hashedToken} and reset_token_expires_at > ${Date.now()}`
+
 
         if(users.length===0){
             return res.status(404).json({
-                message:"user not found"
+                message:"Token Expired"
             })
         }
 
         
         const hashedPassword = await bcrypt.hash(newPassword,parseInt(process.env.HASH_SALT_VALUE))
-        await sql`UPDATE users SET reset_token = NULL, password_hash = ${hashedPassword} WHERE reset_token = ${hashedToken}`;
+        await sql`UPDATE users SET reset_token = ${NULL}, password_hash = ${hashedPassword},reset_token_expires_at=${NULL} WHERE reset_token = ${hashedToken}`;
         return res.status(200).json({
             message:"Password updated successfully"
         })
