@@ -4,58 +4,82 @@ import bcrypt from "bcrypt"
 import dotenv from "dotenv"
 import crypto from "crypto"
 import sgMail from "@sendgrid/mail"
+import { z } from 'zod';
 
+const signUpSchema = z.object({
+  email: z.string().email().trim().toLowerCase(),
+  password: z.string().min(8),
+  fullName: z.string().min(2),
+  role: z.enum(['CLIENT', 'FREELANCER', 'ADMIN']) 
+});
+
+const loginSchema = z.object({
+    email: z.string().email().trim().toLowerCase(),
+    password: z.string().min(1, "Password is required"),
+});
+
+const forgotSchema = z.object({ email: z.string().email().trim().toLowerCase() });
+
+const resetSchema = z.object({
+    token: z.string().min(1),
+    newPassword: z.string().min(8, "Password must be at least 8 characters")
+});
 sgMail.setApiKey(process.env.SEND_GRID_API_KEY)
 
 dotenv.config();
 
-const signUpController = async (req,res)=>{
-    const {email,password,role} = req.body
-    if(!email || !password || !role){
-        res.status(400).json({
-            message : "User information required!"
-        })
+const signUpController = async (req, res) => {
+    const validation = signUpSchema.safeParse(req.body);
+    if (!validation.success) {
+        return res.status(400).json({ message: validation.error.errors[0].message });
     }
+
+    const { email, password, role, fullName } = validation.data;
 
     try {
+        const existing = await sql`SELECT id FROM users WHERE email = ${email}`;
+        if (existing.length > 0) {
+            return res.status(409).json({ message: "Email already in use" });
+        }
+
+        const saltRounds = parseInt(process.env.HASH_SALT_VALUE || '10');
+        const hashedPassword = await bcrypt.hash(password, saltRounds);
         
-        const hashedPassword = await bcrypt.hash(password,parseInt(process.env.HASH_SALT_VALUE))
-        await sql`INSERT INTO users (email,password_hash,role) VALUES (${email},${hashedPassword},${role})`
-        res.status(201).json({
-            message:"User created successfully"
-        })
+        await sql`
+            INSERT INTO users (email, password_hash, role, full_name) 
+            VALUES (${email}, ${hashedPassword}, ${role}, ${fullName})
+        `;
+
+        return res.status(201).json({ message: "User created successfully" });
 
     } catch (error) {
-        res.status(500).json({
-            message : "Internel server error"
-        })
+        console.error("Signup Error:", error); // Log for internal tracking
+        return res.status(500).json({ message: "Internal server error" });
     }
-}
+};
 
 const logInController = async (req,res)=>{
     try {
-        const {email,password} = req.body
-        console.log(`${email} ${password}`)
-        if(!email || !password){
-            res.status(400).json({
-                message : "User information is required"
-            })
-        }
-        
-        const user = await sql`SELECT id,email,password_hash from users where email=${email}`
-        
-        if(user.length===0){
-            res.status(404).json({
-                message : "User not found"
-            })
+        const validation = loginSchema.safeParse(req.body);
+        if (!validation.success) {
+            return res.status(400).json({ message: "Invalid Input" });
         }
 
-        const validPassword = await bcrypt.compare(password,user[0].password_hash)
-       
-        if(!validPassword){
-            res.status(400).json({
-                message : "Invalid password"
-            })
+        const {email,password} = validation.data;
+ 
+        console.log(`${email} ${password}`)
+        
+        const users = await sql`SELECT id,email,password_hash from users where email=${email}`
+        
+        const user = users[0];
+
+        if (!user) {
+            return res.status(401).json({ message: "Invalid email or password" });
+        }
+
+        const validPassword = await bcrypt.compare(password, user.password_hash);
+        if (!validPassword) {
+            return res.status(401).json({ message: "Invalid email or password" });
         }
         
         const token = jwt.sign({
@@ -65,119 +89,100 @@ const logInController = async (req,res)=>{
         },process.env.JWT_SECRETE_KEY,{expiresIn : "2hr"})
 
         res.status(200).json({
+            message: "Login successful",
             token,
         })
     } catch (error) {
+        //Log Error
+        console.error("Critical Login Error:", error);
+        
         res.status(500).json({
             message : "Internal server error"
         })
     }
 }
 
-const forgotPasswordController = async (req,res)=>{
-    const {email} = req.body
-    if(!email){
-        return res.status(400).json({
-            message : "Enter the email"
-        })
+export const forgotPasswordController = async (req, res) => {
+    const validation = forgotSchema.safeParse(req.body);
+    if (!validation.success) {
+        return res.status(400).json({ message: "Valid email is required" });
     }
+
+    const { email } = validation.data;
+
     try {
-        const users = await sql`SELECT * FROM users WHERE email=${email}`
-        if(users.length===0){
-            return res.status(404).json({
-                message : "No user found"
-            })
+        const users = await sql`SELECT id, email FROM users WHERE email = ${email}`;
+        
+        // Security: Always return 200 even if user doesn't exist
+        if (users.length === 0) {
+            return res.status(200).json({ message: "Reset link sent if account exists" });
         }
 
-        
+        const user = users[0];
+        const rawToken = crypto.randomBytes(32).toString("hex");
+        const hashToken = crypto.createHash("sha256").update(rawToken).digest("hex");
+        const expireTime = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
 
-        const currentUserEmail = users[0].email
-        
-        const rawToken = crypto.randomBytes(32).toString("hex")
+        await sql`
+            UPDATE users 
+            SET reset_token = ${hashToken}, 
+                reset_token_expires_at = ${expireTime} 
+            WHERE id = ${user.id}
+        `;
 
-        const hashToken = crypto.createHash("sha256").update(rawToken).digest("hex")
-
-        const expireTime = new Date(Date.now()+15*60*1000)
-
-        
-        await sql`UPDATE users SET reset_token=${hashToken},reset_token_expires_at=${expireTime} WHERE email=${currentUserEmail}`
-
-        const url = `${process.env.BASE_FRONTEND_URL}/reset-password?token=${rawToken}`
-        
-        const msg = {
-            to: currentUserEmail, 
-            from: 'kmrlsih15@gmail.com', 
-            subject: 'Request for Password Reset',
-            text: `
-                You requested a password reset.
-
-                Click the link below to reset your password:
-                ${url}
-
-                If you did not request this, ignore this email.
-                    `,
-                    html: `
-                    <h2>Password Reset Request</h2>
-                    <p>You requested a password reset.</p>
-                    <a href="${url}" 
-                        style="display:inline-block;padding:10px 15px;
-                        background-color:#4CAF50;color:white;
-                        text-decoration:none;border-radius:5px;">
-                        Reset Password
-                    </a>
-                    <p>If you did not request this, ignore this email.</p>
-                    `
-        }
-
-        
-        
-        await sgMail.send(msg)
-        
-
-        return res.status(200).json({
-            message : "Mail sent successfully",
-            url
-        })
-
-
-    } catch (error) {
-        console.log("FULL ERROR:", error);
-        console.log("SENDGRID RESPONSE:", error.response?.body);
-
-        return res.status(500).json({
-            message : "Internal server error"
+        const url = `${process.env.BASE_FRONTEND_URL}/reset-password?token=${rawToken}`;
+        await sgMail.send({
+            to: user.email,
+            from: process.env.EMAIL_FROM, // Use env variable
+            subject: 'Password Reset Request',
+            html: `<p>Click <a href="${url}">here</a> to reset your password. Link expires in 15 mins.</p>`
         });
-       
-    }
 
-}
-
-const resetPasswordController = async (req,res)=>{
-    const {token,newPassword} = req.body
-
-    try {
-        const hashedToken = crypto.createHash("sha256").update(token).digest("hex")
-        
-        const users = await sql`SELECT * FROM users where reset_token=${hashedToken} and reset_token_expires_at > ${Date.now()}`
-
-
-        if(users.length===0){
-            return res.status(404).json({
-                message:"Token Expired"
-            })
-        }
-
-        
-        const hashedPassword = await bcrypt.hash(newPassword,parseInt(process.env.HASH_SALT_VALUE))
-        await sql`UPDATE users SET reset_token = ${NULL}, password_hash = ${hashedPassword},reset_token_expires_at=${NULL} WHERE reset_token = ${hashedToken}`;
-        return res.status(200).json({
-            message:"Password updated successfully"
-        })
+        return res.status(200).json({ message: "Reset link sent if account exists" });
 
     } catch (error) {
-        return res.status(500).json({
-            message:"Internal server error"
-        })
+        console.error("Forgot Password Error:", error);
+        return res.status(500).json({ message: "Internal server error" });
     }
-}
+};
+
+export const resetPasswordController = async (req, res) => {
+    const validation = resetSchema.safeParse(req.body);
+    if (!validation.success) {
+        return res.status(400).json({ message: "Invalid input", errors: validation.error.flatten().fieldErrors });
+    }
+
+    const { token, newPassword } = validation.data;
+
+    try {
+        const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+
+        const users = await sql`
+            SELECT id FROM users 
+            WHERE reset_token = ${hashedToken} 
+            AND reset_token_expires_at > ${new Date()}
+        `;
+
+        if (users.length === 0) {
+            return res.status(400).json({ message: "Token is invalid or has expired" });
+        }
+
+        const salt = parseInt(process.env.HASH_SALT_VALUE || '10');
+        const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+        await sql`
+            UPDATE users 
+            SET password_hash = ${hashedPassword}, 
+                reset_token = NULL, 
+                reset_token_expires_at = NULL 
+            WHERE id = ${users[0].id}
+        `;
+
+        return res.status(200).json({ message: "Password updated successfully" });
+
+    } catch (error) {
+        console.error("Reset Password Error:", error);
+        return res.status(500).json({ message: "Internal server error" });
+    }
+};
 export {signUpController,logInController,forgotPasswordController,resetPasswordController};
