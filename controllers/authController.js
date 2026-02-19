@@ -24,6 +24,7 @@ const resetSchema = z.object({
     token: z.string().min(1),
     newPassword: z.string().min(8, "Password must be at least 8 characters")
 });
+
 sgMail.setApiKey(process.env.SEND_GRID_API_KEY)
 
 dotenv.config();
@@ -66,10 +67,8 @@ const logInController = async (req,res)=>{
         }
 
         const {email,password} = validation.data;
- 
-        console.log(`${email} ${password}`)
         
-        const users = await sql`SELECT id,email,password_hash from users where email=${email}`
+        const users = await sql`SELECT id,email,password_hash,role from users where email=${email}`
         
         const user = users[0];
 
@@ -83,9 +82,9 @@ const logInController = async (req,res)=>{
         }
         
         const token = jwt.sign({
-            id:user[0].id,
-            email : user[0].email,
-            role : user[0].role
+            id:user.id,
+            email : user.email,
+            role : user.role
         },process.env.JWT_SECRETE_KEY,{expiresIn : "2hr"})
 
         res.status(200).json({
@@ -102,7 +101,7 @@ const logInController = async (req,res)=>{
     }
 }
 
-export const forgotPasswordController = async (req, res) => {
+const forgotPasswordController = async (req, res) => {
     const validation = forgotSchema.safeParse(req.body);
     if (!validation.success) {
         return res.status(400).json({ message: "Valid email is required" });
@@ -138,7 +137,10 @@ export const forgotPasswordController = async (req, res) => {
             html: `<p>Click <a href="${url}">here</a> to reset your password. Link expires in 15 mins.</p>`
         });
 
-        return res.status(200).json({ message: "Reset link sent if account exists" });
+        return res.status(200).json({ 
+            message: "Reset link sent if account exists",
+            url
+         });
 
     } catch (error) {
         console.error("Forgot Password Error:", error);
@@ -146,7 +148,8 @@ export const forgotPasswordController = async (req, res) => {
     }
 };
 
-export const resetPasswordController = async (req, res) => {
+const resetPasswordController = async (req, res) => {
+
     const validation = resetSchema.safeParse(req.body);
     if (!validation.success) {
         return res.status(400).json({ message: "Invalid input", errors: validation.error.flatten().fieldErrors });
@@ -156,20 +159,21 @@ export const resetPasswordController = async (req, res) => {
 
     try {
         const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
-
+        
         const users = await sql`
             SELECT id FROM users 
             WHERE reset_token = ${hashedToken} 
-            AND reset_token_expires_at > ${new Date()}
+            AND reset_token_expires_at > ${new Date().toISOString()}
         `;
-
+        
+        
         if (users.length === 0) {
             return res.status(400).json({ message: "Token is invalid or has expired" });
         }
-
+        
         const salt = parseInt(process.env.HASH_SALT_VALUE || '10');
         const hashedPassword = await bcrypt.hash(newPassword, salt);
-
+        
         await sql`
             UPDATE users 
             SET password_hash = ${hashedPassword}, 
@@ -177,7 +181,7 @@ export const resetPasswordController = async (req, res) => {
                 reset_token_expires_at = NULL 
             WHERE id = ${users[0].id}
         `;
-
+           
         return res.status(200).json({ message: "Password updated successfully" });
 
     } catch (error) {
