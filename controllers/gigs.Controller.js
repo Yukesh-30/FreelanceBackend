@@ -1,5 +1,6 @@
 import sql from "../db/dbConfig.js"
 import {z} from "zod"
+import { internelServerError } from "../helper/response.js";
 
 const updateGigSchema = z.object({
   title: z.string().min(5).max(255),
@@ -14,7 +15,7 @@ const packageSchema = z.object({
   description : z.string().min(10).max(255),
   delivery_days : z.number(),
   revisions : z.number()
-})
+}).partial();
 
 const mediaSchema = z.object({
   media_url : z.string().url()
@@ -106,7 +107,7 @@ const getAllGigs = async (req, res) => {
 
     } catch (error) {
         return res.status(500).json({
-            message: "Internal server error"
+            message: internelServerError
         });
     }
 };
@@ -284,7 +285,7 @@ const deleteGigById = async (req,res)=>{
         })
     } catch (error) {
         return res.status(500).json({
-            message : "Internal server error"
+            message : internelServerError
         })
     }
 }
@@ -329,7 +330,7 @@ const updateGig = async (req, res) => {
 
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({ message: internelServerError });
   }
 };
 const getCloudinaryType = (url) => {
@@ -371,7 +372,7 @@ const postMedia = async (req,res)=>{
       })
     } catch (error) {
        return res.status(500).json({
-        message : "Internal Server Error"
+        message : internelServerError
        })
     }
 
@@ -399,7 +400,7 @@ const deleteMediaById = async (req,res) =>{
       
     } catch (error) {
        return res.status(500).json({
-        message : "Internal server error"
+        message : internelServerError
        })
     }
 }
@@ -418,25 +419,95 @@ const createPackage = async (req,res) =>{
       })
     }
 
-    const {package_type,price,description,delivery_days,revisions} = validation.data
+    try {
+        const {package_type,price,description,delivery_days,revisions} = validation.data
 
-    await sql`INSERT INTO gigpackage(gig_id,
-                package_type,
-                price,
-                description,
-                delivery_days,
-                revisions) VALUES(${id},${package_type},${price},${description},${delivery_days},${revisions})`
+      await sql`INSERT INTO gigpackage(gig_id,
+                  package_type,
+                  price,
+                  description,
+                  delivery_days,
+                  revisions) VALUES(${id},${package_type},${price},${description},${delivery_days},${revisions})`
 
-    return res.status(201).json({
-      message : "Package created successfully"
-    })
+      return res.status(201).json({
+        message : "Package created successfully"
+      })
+    } catch (error) {
+      return res.status(500).json({
+        message : internelServerError
+      })
+    }
 }
 //delete the pack by id
 
-// const deletePackageById = async (req,res) =>{
-//   const id = req.params.id
+const deletePackageById = async (req,res) =>{
+  const id = req.params.id
 
-// }
+  try {
+    const packages = await sql`SELECT * FROM gigpackage where id=${id}`
+    if(packages.length===0){
+      return res.status(404).json({
+        message : "Package not found"
+      })
+    } 
+
+    await sql`DELETE FROM gigpackage where id=${id}`
+    res.status(200).json({
+      message : "Package deleted Successfully"
+    })
+  } catch (error) {
+    return res.status(500).json({
+        message : internelServerError
+      })
+  }
+
+}
+
+const updatePackageById = async (req,res)=>{
+   const id = req.params.id
+   const validation = packageSchema.safeParse(req.body)
+   if(!validation.success){
+      return res.status(400).json({
+        message : "Bad request format"
+      })
+   }
+
+   try {
+     const pakages = await sql`SELECT * FROM gigpackage where id=${id}`
+      const existingPackage = pakages[0]
+      let {package_type,price,description,delivery_days,revisions} = validation.data
+
+      package_type = package_type ?? existingPackage.package_type
+      price = price ?? existingPackage.price
+      description = description ?? existingPackage.description
+      delivery_days = delivery_days ?? existingPackage.delivery_days
+      revisions = revisions ?? existingPackage.revisions
+
+      await sql`UPDATE gigpackage SET package_type=${package_type},price=${price},description=${description},delivery_days=${delivery_days},revisions=${revisions} where id=${id}`
+
+      return res.status(200).json({
+        message:"Package updated successfully"
+      })
+    
+   } catch (error) {
+     return res.status(500).json({
+      message : internelServerError
+     })
+   }
+   
+   
 
 
-export {getAllGigs,getGigById,createGig,deleteGigById,updateGig,postMedia,deleteMediaById,createPackage}
+}
+
+
+export {getAllGigs,
+  getGigById,
+  createGig,
+  deleteGigById,
+  updateGig,
+  postMedia,
+  deleteMediaById,
+  createPackage,
+  deletePackageById,
+  updatePackageById}

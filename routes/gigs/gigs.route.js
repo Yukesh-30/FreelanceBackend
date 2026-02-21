@@ -1,5 +1,5 @@
 import express from "express"
-import { createGig, deleteGigById, getAllGigs,getGigById,postMedia,updateGig,deleteMediaById, createPackage} from "../../controllers/gigs.Controller.js";
+import { createGig, deleteGigById, getAllGigs,getGigById,postMedia,updateGig,deleteMediaById, createPackage, deletePackageById,updatePackageById} from "../../controllers/gigs.Controller.js";
 
 const gigsRoute = express.Router()
 
@@ -20,6 +20,8 @@ gigsRoute.delete('/media',deleteMediaById)
 
 //pakage
 gigsRoute.post('/package/:id',createPackage)
+gigsRoute.delete('/package/:id',deletePackageById)
+gigsRoute.patch('/package/:id',updatePackageById)
 
 
 export default gigsRoute
