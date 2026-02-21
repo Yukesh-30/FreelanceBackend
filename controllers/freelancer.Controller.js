@@ -1,5 +1,14 @@
 import sql from "../db/dbConfig.js"
+import {z} from "zod"
 
+const freelancerDetailSchema = z.object({
+    bio: z.string().trim().optional(),
+    hourly_rate: z.number().positive().optional(),
+    total_earnings: z.number().nonnegative().optional()
+});
+const skillsSchema = z.object({
+    skills : z.array(z.string())
+});
 const getFreelancerDetails = async (req,res) => {
     const id = req.params.id
     
@@ -36,7 +45,14 @@ const getFreelancerDetails = async (req,res) => {
 
 const updateFreelancerProfile = async (req, res) => {
     const id = req.params.id
-    let { bio, hourly_rate, total_earnings } = req.body
+    const validation = freelancerDetailSchema.safeParse(req.body)
+
+    if(!validation.success){
+        return res.status(400).json({
+            message : "Bad request. Check the format"
+        })
+    }
+    let { bio, hourly_rate, total_earnings } = validation.data
 
     try {
         const users = await sql`
@@ -75,5 +91,32 @@ const updateFreelancerProfile = async (req, res) => {
     }
 }
 
+const updateFreelancerSkills = async (req,res) =>{
+    const id = req.params.id
+    const validation = skillsSchema.safeParse(req.body)
+    console.log(id)
+    if(!validation.success){
+        return res.status(400).json({
+            message : "Bad request. Check the format"
+        })
+    }
 
-export {getFreelancerDetails,updateFreelancerProfile}
+    try {
+        const  {skills}  = validation.data
+        console.log(skills)
+
+        await sql`UPDATE freelancer_profiles SET skills=${skills} where user_id=${id}`
+
+        res.status(200).json({
+            message : "Skills updated successfully"
+        })
+        
+    } catch (error) {
+        return res.status(500).json({
+            message: "Internal server error"
+        })
+    }
+}
+
+
+export {getFreelancerDetails,updateFreelancerProfile,updateFreelancerSkills}

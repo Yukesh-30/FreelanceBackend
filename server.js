@@ -1,9 +1,10 @@
 import express from "express";
 import dotenv from "dotenv"
 import authRoute from "./routes/auth/authroute.js";
-import userRoute from "./routes/users/userRoute.js";
+import userRoute from "./routes/users/userProfile.Route.js";
 import cors from "cors"
-import freelancerRoute from "./routes/freelancer/freelancerRoute.js";
+import freelancerRoute from "./routes/freelancer/freelancer.route.js";
+import gigsRoute from "./routes/gigs/gigs.route.js";
 const app = express();
 const port = process.env.PORT || 3000
 app.use(cors())
@@ -14,6 +15,7 @@ dotenv.config()
 app.use('/api/auth',authRoute)
 app.use('/api/users',userRoute)
 app.use('/api/freelancer',freelancerRoute)
+app.use('/api/gigs',gigsRoute)
 
 app.listen(port,(err)=>{
     if(!err){

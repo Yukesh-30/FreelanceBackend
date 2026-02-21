@@ -1,4 +1,11 @@
 import sql from "../db/dbConfig.js"
+import {z} from "zod"
+
+
+const userDetailSchema = z.object({
+    full_name: z.string().trim().max(20).optional(),
+    profile_pic_url: z.string().url().optional()
+});
 
 const userProfileDetails = async (req,res) =>{
     const userId = req.params.id
@@ -33,44 +40,48 @@ const userProfileDetails = async (req,res) =>{
     }
 }
 
-const userDetailUpdate = async (req,res) =>{
-    let {full_name,profile_pic_url} = req.body
-    const id = req.params.id
+const userDetailUpdate = async (req, res) => {
+    const validation = userDetailSchema.safeParse(req.body);
+
+    if (!validation.success) {
+        return res.status(400).json({
+            message : "Bad request. Check the format"
+        })
+    }
+
+    const id = req.params.id;
     
+
     try {
-        const user = await sql`SELECT * FROM users WHERE id = ${id}`
-        if(user.length===0){
-            return res.status(400).json({
-                message : "User not found"
-            })
+        const user = await sql`SELECT * FROM users WHERE id = ${id}`;
+
+        if (user.length === 0) {
+            return res.status(404).json({
+                message: "User not found"
+            });
         }
 
-        if(full_name===undefined){
-            full_name = user[0].full_name
-        }
-        if(profile_pic_url===undefined){
-            profile_pic_url = user[0].profile_pic_url
-        }
-        
+        const full_name = validation.data.full_name ?? user[0].full_name;
+        const profile_pic_url = validation.data.profile_pic_url ?? user[0].profile_pic_url;
+
         await sql`
             UPDATE users 
             SET 
                 full_name = ${full_name},
                 profile_pic_url = ${profile_pic_url},
-                updated_at = NOW() 
+                updated_at = NOW()
             WHERE id = ${id}
-            `;
+        `;
 
-        res.status(200).json({
-            message:"user details updated"
-        })
+        return res.status(200).json({
+            message: "User details updated"
+        });
+
     } catch (error) {
-        res.status(500).json({
-            message : "Internal sever error"
-        })
+        return res.status(500).json({
+            message: "Internal server error"
+        });
     }
-
-
-}
+};
 
 export {userProfileDetails,userDetailUpdate}

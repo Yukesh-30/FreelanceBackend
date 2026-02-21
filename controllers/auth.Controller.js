@@ -1,4 +1,4 @@
-import sql from "./../db/dbConfig.js"
+import sql from "../db/dbConfig.js"
 import jwt from "jsonwebtoken"
 import bcrypt from "bcrypt"
 import dotenv from "dotenv"
