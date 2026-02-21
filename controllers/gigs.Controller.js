@@ -1,9 +1,27 @@
 import sql from "../db/dbConfig.js"
 import {z} from "zod"
 
+const updateGigSchema = z.object({
+  title: z.string().min(5).max(255),
+  description: z.string().min(5),
+  category: z.string(),
+  subcategory: z.string(),
+}).partial();
+
+const packageSchema = z.object({
+  package_type : z.enum(['BASIC','STANDARD','PREMIUM']),
+  price : z.number(),
+  description : z.string().min(10).max(255),
+  delivery_days : z.number(),
+  revisions : z.number()
+})
+
+const mediaSchema = z.object({
+  media_url : z.string().url()
+})
 
 const createGigSchema = z.object({
-  freelancer_id: z.string().uuid(),
+  freelancer_id: z.string(),
 
   title: z.string().min(5).max(255),
   description: z.string().min(10),
@@ -270,4 +288,155 @@ const deleteGigById = async (req,res)=>{
         })
     }
 }
-export {getAllGigs,getGigById,createGig,deleteGigById}
+
+const updateGig = async (req, res) => {
+  const id = req.params.id;
+  console.log(req.body)
+  const validation = updateGigSchema.safeParse(req.body);
+
+  if (!validation.success) {
+    return res.status(400).json({
+      message: "Bad request. Check the format",
+      errors: validation.error.format() // Good for debugging!
+    });
+  }
+
+  try {
+    const gigs = await sql`SELECT * FROM gigs WHERE id=${id}`;
+    const existingGig = gigs[0];
+
+    if (!existingGig) {
+      return res.status(404).json({ message: "Gig not found" });
+    }
+
+    // Use 'let' so we can reassign, OR merge into a new object
+    let { title, description, category, subcategory } = validation.data;
+
+    const finalTitle = title ?? existingGig.title;
+    const finalDescription = description ?? existingGig.description;
+    const finalCategory = category ?? existingGig.category;
+    const finalSubcategory = subcategory ?? existingGig.subcategory;
+
+    await sql`
+      UPDATE gigs 
+      SET title=${finalTitle}, 
+          description=${finalDescription}, 
+          category=${finalCategory}, 
+          subcategory=${finalSubcategory} 
+      WHERE id=${id}`;
+
+    return res.status(200).json({ message: "Updated successfully" });
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+const getCloudinaryType = (url) => {
+  if (!url) return null;
+
+  if (url.includes('/video/upload/')) return 'VIDEO';
+  if (url.includes('/image/upload/')) return 'IMAGE';
+  if (url.includes('/raw/upload/')) return 'RAW'; 
+
+  const videoExtensions = ['.mp4', '.mov', '.webm', '.mkv', '.avi'];
+  const isVideo = videoExtensions.some(ext => url.toLowerCase().endsWith(ext));
+  
+  return isVideo ? 'VIDEO' : 'IMAGE';
+};
+
+const postMedia = async (req,res)=>{
+    const id = req.params.id
+
+    const validation = mediaSchema.safeParse(req.body)
+
+    if(!validation.success){
+      return res.status(400).json({
+        message : "Bad request Format"
+      })
+    }
+
+    try {
+      const {media_url} = validation.data
+
+      const media_type = getCloudinaryType(media_url)
+      
+      await sql`
+        INSERT INTO gigmedia (gig_id, media_url, media_type) 
+        VALUES (${id}, ${media_url}, ${media_type})
+      `;
+
+      return res.status(201).json({
+        message: "Media inserted sucessfully"
+      })
+    } catch (error) {
+       return res.status(500).json({
+        message : "Internal Server Error"
+       })
+    }
+
+}
+
+const deleteMediaById = async (req,res) =>{
+    const {id} = req.body
+
+    
+
+    try {
+      const media = await sql`SELECT * FROM gigmedia where id=${id}`
+      console.log(media)
+      if(media.length===0){
+        return res.status(404).json({
+          messagec : "Media not found"
+        })
+      }
+
+      await sql`DELETE FROM gigmedia where id=${id}`
+
+      return res.status(200).json({
+        message : "Media deleted successfully"
+      })
+      
+    } catch (error) {
+       return res.status(500).json({
+        message : "Internal server error"
+       })
+    }
+}
+
+//package update
+//create pakage
+
+const createPackage = async (req,res) =>{
+    const id = req.params.id
+
+    const validation = packageSchema.safeParse(req.body)
+
+    if(!validation.success){
+      return res.status(400).json({
+        message : "Bad request format"
+      })
+    }
+
+    const {package_type,price,description,delivery_days,revisions} = validation.data
+
+    await sql`INSERT INTO gigpackage(gig_id,
+                package_type,
+                price,
+                description,
+                delivery_days,
+                revisions) VALUES(${id},${package_type},${price},${description},${delivery_days},${revisions})`
+
+    return res.status(201).json({
+      message : "Package created successfully"
+    })
+}
+//delete the pack by id
+
+// const deletePackageById = async (req,res) =>{
+//   const id = req.params.id
+
+// }
+
+
+export {getAllGigs,getGigById,createGig,deleteGigById,updateGig,postMedia,deleteMediaById,createPackage}
