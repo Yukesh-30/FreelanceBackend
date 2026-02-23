@@ -31,7 +31,7 @@ const userProfileDetails = async (req, res) => {
             email: userDetail[0].email,
             full_name: userDetail[0].full_name,
             role: userDetail[0].role,
-            profile_url: userDetail[0].profile_url,
+            profile_url: userDetail[0].profile_pic_url,
             is_verified: userDetail[0].is_verified,
             member_since: memberSince // Adding the new field here
         };

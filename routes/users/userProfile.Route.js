@@ -6,7 +6,7 @@ const userRoute = express.Router()
 
 
 userRoute.get('/:id',userProfileDetails)
-userRoute.post(
+userRoute.put(
   "/profile-picture",
   upload.single("profileImage"),
   updateProfilePicture
