@@ -1,4 +1,4 @@
-import sql from "../db/dbConfig.js"
+import sql from "../config/dbConfig.js"
 import {z} from "zod"
 
 const freelancerDetailSchema = z.object({
@@ -94,7 +94,6 @@ const updateFreelancerProfile = async (req, res) => {
 const updateFreelancerSkills = async (req,res) =>{
     const id = req.params.id
     const validation = skillsSchema.safeParse(req.body)
-    console.log(id)
     if(!validation.success){
         return res.status(400).json({
             message : "Bad request. Check the format"
@@ -103,7 +102,7 @@ const updateFreelancerSkills = async (req,res) =>{
 
     try {
         const  {skills}  = validation.data
-        console.log(skills)
+       
 
         await sql`UPDATE freelancer_profiles SET skills=${skills} where user_id=${id}`
 

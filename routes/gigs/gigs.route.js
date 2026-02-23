@@ -1,5 +1,5 @@
 import express from "express"
-import { createGig, deleteGigById, getAllGigs,getGigById,postMedia,updateGig,deleteMediaById, createPackage, deletePackageById,updatePackageById} from "../../controllers/gigs.Controller.js";
+import { createGig, deleteGigById, getAllGigs,getGigById,postMedia,updateGig,deleteMediaById, createPackage, deletePackageById,updatePackageById, getGigsByFreelancerId} from "../../controllers/gigs.Controller.js";
 
 const gigsRoute = express.Router()
 
@@ -8,6 +8,7 @@ gigsRoute.get('/:id',getGigById);
 gigsRoute.post('/create',createGig);
 gigsRoute.delete('/delete/:id',deleteGigById);
 
+gigsRoute.get('/all-gigs/:id',getGigsByFreelancerId);
 
 // for the update gig basic infomation
 

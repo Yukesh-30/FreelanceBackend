@@ -1,4 +1,4 @@
-import sql from "../db/dbConfig.js"
+import sql from "../config/dbConfig.js"
 import {z} from "zod"
 
 
@@ -7,36 +7,44 @@ const userDetailSchema = z.object({
     profile_pic_url: z.string().url().optional()
 });
 
-const userProfileDetails = async (req,res) =>{
-    const userId = req.params.id
+const userProfileDetails = async (req, res) => {
+    const userId = req.params.id;
     
     try {
-        const userDetail = await sql`SELECT * FROM users where id=${userId}`
+        const userDetail = await sql`SELECT * FROM users where id=${userId}`;
 
-
-        if(userDetail.length===0){
+        if (userDetail.length === 0) {
             return res.status(404).json({
-                message : "User not found"
-            })
+                message: "User not found"
+            });
         }
+
+        // Extracting and formatting the date
+        const dateObj = new Date(userDetail[0].created_at);
+        const memberSince = dateObj.toLocaleString('en-US', { 
+            month: 'long', 
+            year: 'numeric' 
+        }); // Result: "September 2025"
 
         const infomations = {
-            email : userDetail[0].email,
-            full_name:userDetail[0].full_name,
-            role : userDetail[0].role,
-            profile_url : userDetail[0].profile_url,
-            is_verified : userDetail[0].is_verified
-        }
+            email: userDetail[0].email,
+            full_name: userDetail[0].full_name,
+            role: userDetail[0].role,
+            profile_url: userDetail[0].profile_url,
+            is_verified: userDetail[0].is_verified,
+            member_since: memberSince // Adding the new field here
+        };
 
         res.status(200).json({
             message: `Information found for ${infomations.full_name}`,
             infomations
-        })
+        });
 
     } catch (error) {
+        console.error(error); 
         res.status(500).json({
-            message:"Internal server error"
-        })
+            message: "Internal server error"
+        });
     }
 }
 
