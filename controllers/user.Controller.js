@@ -1,5 +1,6 @@
 import sql from "../config/dbConfig.js"
 import {z} from "zod"
+import cloudinary from "../config/cloudnary.config.js";
 
 
 const userDetailSchema = z.object({
@@ -91,5 +92,50 @@ const userDetailUpdate = async (req, res) => {
         });
     }
 };
+const updateProfilePicture = async (req, res) => {
+  try {
+    const { userId } = req.body;
 
-export {userProfileDetails,userDetailUpdate}
+    if (!userId) {
+      return res.status(400).json({ message: "User ID is required" });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ message: "Profile image is required" });
+    }
+    const user = await sql`
+      SELECT * FROM users WHERE id = ${userId}
+    `;
+
+    if (user.length === 0) {
+      return res.status(404).json({ message: "Freelancer not found" });
+    }
+
+    const result = await cloudinary.uploader.upload(req.file.path, {
+      public_id: `freelancers/profile_images/user_${userId}`,
+      overwrite: true,
+      resource_type: "image"
+    });
+
+    const updatedUser = await sql`
+      UPDATE users
+      SET profile_pic_url = ${result.secure_url}
+      WHERE id = ${userId}
+    `;
+
+    return res.status(200).json({
+      message: "Profile picture updated successfully",
+      
+    });
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      message: "Something went wrong",
+      error: error.message,
+    });
+  }
+};
+
+
+export {userProfileDetails,userDetailUpdate,updateProfilePicture}

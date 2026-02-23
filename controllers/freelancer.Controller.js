@@ -1,6 +1,8 @@
 import sql from "../config/dbConfig.js"
 import {z} from "zod"
 
+
+
 const freelancerDetailSchema = z.object({
     bio: z.string().trim().optional(),
     hourly_rate: z.number().positive().optional(),

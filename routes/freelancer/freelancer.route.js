@@ -10,4 +10,5 @@ freelancerRoute.patch('/details/:id',updateFreelancerProfile)
 freelancerRoute.patch('/details-skills/:id',updateFreelancerSkills)
 
 
+
 export default freelancerRoute;
