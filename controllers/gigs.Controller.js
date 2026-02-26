@@ -3,6 +3,19 @@ import { z } from "zod"
 import { internelServerError } from "../helper/response.js";
 import cloudinary from "../config/cloudnary.config.js";
 
+const getCloudinaryType = (url) => {
+  if (!url) return null;
+
+  if (url.includes('/video/upload/')) return 'VIDEO';
+  if (url.includes('/image/upload/')) return 'IMAGE';
+  if (url.includes('/raw/upload/')) return 'RAW';
+
+  const videoExtensions = ['.mp4', '.mov', '.webm', '.mkv', '.avi'];
+  const isVideo = videoExtensions.some(ext => url.toLowerCase().endsWith(ext));
+
+  return isVideo ? 'VIDEO' : 'IMAGE';
+};
+
 const updateGigSchema = z.object({
   title: z.string().min(5).max(255),
   description: z.string().min(5),
@@ -285,9 +298,11 @@ const createGig = async (req, res) => {
   } = validation.data;
 
   let cover_image_url = null;
-  if (req.file) {
+  const coverFile = req.files && req.files['cover_pic'] ? req.files['cover_pic'][0] : req.file;
+
+  if (coverFile) {
     try {
-      const result = await cloudinary.uploader.upload(req.file.path, {
+      const result = await cloudinary.uploader.upload(coverFile.path, {
         folder: "gigs/cover_images",
         resource_type: "image"
       });
@@ -345,19 +360,34 @@ const createGig = async (req, res) => {
         )
       `;
     }
-    for (const item of media) {
-      await sql`
-        INSERT INTO gigmedia (
-          gig_id,
-          media_url,
-          media_type
-        )
-        VALUES (
-          ${gigId},
-          ${item.url},
-          ${item.type}
-        )
-      `;
+
+    const mediaFiles = req.files && req.files['media_files'] ? req.files['media_files'] : [];
+
+    for (const file of mediaFiles) {
+      try {
+        const result = await cloudinary.uploader.upload(file.path, {
+          folder: "gigs/media",
+          resource_type: "auto"
+        });
+
+        const media_url = result.secure_url;
+        const media_type = getCloudinaryType(media_url);
+
+        await sql`
+          INSERT INTO gigmedia (
+            gig_id,
+            media_url,
+            media_type
+          )
+          VALUES (
+            ${gigId},
+            ${media_url},
+            ${media_type}
+          )
+        `;
+      } catch (uploadError) {
+        console.error("Cloudinary media upload error (ignored to continue creation):", uploadError);
+      }
     }
 
     await sql`COMMIT`;
@@ -434,75 +464,98 @@ const updateGig = async (req, res) => {
     return res.status(500).json({ message: internelServerError });
   }
 };
-const getCloudinaryType = (url) => {
-  if (!url) return null;
 
-  if (url.includes('/video/upload/')) return 'VIDEO';
-  if (url.includes('/image/upload/')) return 'IMAGE';
-  if (url.includes('/raw/upload/')) return 'RAW';
-
-  const videoExtensions = ['.mp4', '.mov', '.webm', '.mkv', '.avi'];
-  const isVideo = videoExtensions.some(ext => url.toLowerCase().endsWith(ext));
-
-  return isVideo ? 'VIDEO' : 'IMAGE';
-};
 
 const postMedia = async (req, res) => {
-  const id = req.params.id
+  const id = req.params.id;
 
-  const validation = mediaSchema.safeParse(req.body)
-
-  if (!validation.success) {
-    return res.status(400).json({
-      message: "Bad request Format"
-    })
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({ message: "No media files provided" });
   }
 
   try {
-    const { media_url } = validation.data
+    const uploadedMedia = [];
 
-    const media_type = getCloudinaryType(media_url)
+    for (const file of req.files) {
+      const result = await cloudinary.uploader.upload(file.path, {
+        folder: "gigs/media",
+        resource_type: "auto"
+      });
 
-    await sql`
+      const media_url = result.secure_url;
+      const media_type = getCloudinaryType(media_url);
+
+      const [insertedMedia] = await sql`
         INSERT INTO gigmedia (gig_id, media_url, media_type) 
         VALUES (${id}, ${media_url}, ${media_type})
+        RETURNING *
       `;
-
-    return res.status(201).json({
-      message: "Media inserted sucessfully"
-    })
-  } catch (error) {
-    return res.status(500).json({
-      message: internelServerError
-    })
-  }
-
-}
-
-const deleteMediaById = async (req, res) => {
-  const { id } = req.body
-
-
-
-  try {
-    const media = await sql`SELECT * FROM gigmedia where id=${id}`
-    console.log(media)
-    if (media.length === 0) {
-      return res.status(404).json({
-        messagec: "Media not found"
-      })
+      uploadedMedia.push(insertedMedia);
     }
 
-    await sql`DELETE FROM gigmedia where id=${id}`
+    return res.status(201).json({
+      message: "Media inserted successfully",
+      media: uploadedMedia
+    });
+
+  } catch (error) {
+    console.error("Cloudinary upload error:", error);
+    return res.status(500).json({
+      message: "Failed to upload media"
+    });
+  }
+}
+
+const extractPublicId = (url) => {
+  try {
+    const parts = url.split('/upload/');
+    if (parts.length < 2) return null;
+
+    let afterUpload = parts[1];
+    if (afterUpload.match(/^v\d+\//)) {
+      afterUpload = afterUpload.replace(/^v\d+\//, '');
+    }
+
+    const lastDotIndex = afterUpload.lastIndexOf('.');
+    if (lastDotIndex !== -1) {
+      afterUpload = afterUpload.substring(0, lastDotIndex);
+    }
+
+    return afterUpload;
+  } catch (e) {
+    return null;
+  }
+};
+
+const deleteMediaById = async (req, res) => {
+  const { id } = req.body;
+
+  try {
+    const mediaRow = await sql`SELECT * FROM gigmedia where id=${id}`;
+    if (mediaRow.length === 0) {
+      return res.status(404).json({ message: "Media not found" });
+    }
+
+    const media = mediaRow[0];
+
+    // Destroy in Cloudinary
+    if (media.media_url && media.media_url.includes('cloudinary.com')) {
+      const publicId = extractPublicId(media.media_url);
+      if (publicId) {
+        const resource_type = media.media_type === 'VIDEO' ? 'video' : 'image';
+        await cloudinary.uploader.destroy(publicId, { resource_type });
+      }
+    }
+
+    await sql`DELETE FROM gigmedia where id=${id}`;
 
     return res.status(200).json({
       message: "Media deleted successfully"
-    })
+    });
 
   } catch (error) {
-    return res.status(500).json({
-      message: internelServerError
-    })
+    console.error("Cloudinary delete error:", error);
+    return res.status(500).json({ message: "Internal server error" });
   }
 }
 

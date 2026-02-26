@@ -3,12 +3,15 @@ import multer from "multer";
 const storage = multer.diskStorage({});
 
 const fileFilter = (req, file, cb) => {
-  const allowedTypes = ["image/jpeg", "image/png", "image/jpg"];
+  const allowedTypes = [
+    "image/jpeg", "image/png", "image/jpg", "image/webp", "image/gif",
+    "video/mp4", "video/webm", "video/quicktime", "video/x-msvideo"
+  ];
 
   if (allowedTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error("Only JPG and PNG images are allowed"), false);
+    cb(new Error(`File type ${file.mimetype} is not allowed. Only images (JPG, PNG, WEBP, GIF) and videos (MP4, WEBM, MOV, AVI) are allowed.`), false);
   }
 };
 
