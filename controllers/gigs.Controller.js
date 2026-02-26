@@ -288,21 +288,6 @@ const createGig = async (req, res) => {
     freelancer_id, title, description, category, subcategory, tags, packages, media
   } = validation.data;
 
-  let cover_image_url = null;
-  const coverFile = req.files && req.files['cover_pic'] ? req.files['cover_pic'][0] : req.file;
-
-  if (coverFile) {
-    try {
-      const result = await cloudinary.uploader.upload(coverFile.path, {
-        folder: "gigs/cover_images",
-        resource_type: "image"
-      });
-      cover_image_url = result.secure_url;
-    } catch (uploadError) {
-      console.error("Cloudinary upload error:", uploadError);
-      return res.status(500).json({ message: "Failed to upload cover image" });
-    }
-  }
 
   let cover_image_url = null;
   const coverFile = req.files && req.files['cover_pic'] ? req.files['cover_pic'][0] : req.file;
