@@ -1,5 +1,6 @@
 import express from "express";
 import jwt from "jsonwebtoken"
+import sql from "../db/dbConfig.js";
 //This will authenticate the token when user login
 const protect = async (req, res, next) => {
     try {
@@ -49,7 +50,6 @@ const requireClient = async (req, res, next) => {
     }
 }
 
-// Optional: for Admin
 const requireAdmin = async (req, res, next) => {
     try {
         if (!req.user || req.user.role !== "ADMIN") {
@@ -62,6 +62,33 @@ const requireAdmin = async (req, res, next) => {
         res.status(500).json({ message: "Internal server error checking role" });
     }
 }
+
+export const correspondingClient = async (req, res, next) => {
+  try {
+    const jobId = req.params.id;
+    const userId = req.user.id;
+
+    const result = await sql.query(
+      `SELECT client_id FROM jobs WHERE id = $1`,
+      [jobId]
+    );
+
+    if (result.length === 0) {
+      return res.status(404).json({ message: "Job not found" });
+    }
+
+    if (result[0].client_id !== userId) {
+      return res.status(403).json({
+        message: "Forbidden: Access restricted to job owner"
+      });
+    }
+
+    next();
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
 
 
 export { protect, requireFreelancer, requireClient, requireAdmin };

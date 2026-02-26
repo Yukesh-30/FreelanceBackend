@@ -183,95 +183,51 @@ const createGig = async (req, res) => {
   const validation = createGigSchema.safeParse(req.body);
 
   if (!validation.success) {
-    return res.status(400).json({
-      message: validation.error.errors
-    });
+    return res.status(400).json({ message: validation.error.errors });
   }
 
   const {
-    freelancer_id,
-    title,
-    description,
-    category,
-    subcategory,
-    tags,
-    packages,
-    media
+    freelancer_id, title, description, category, subcategory, tags, packages, media
   } = validation.data;
 
   try {
+    // Note: Neon serverless handles single queries well. 
+    // For true transactions in serverless, ensure your library/setup supports 'BEGIN'
     await sql`BEGIN`;
 
+    // 1. Insert the main Gig (Must be first to get the ID)
     const [gig] = await sql`
-      INSERT INTO gigs (
-        freelancer_id,
-        title,
-        description,
-        category,
-        subcategory,
-        tags
-      )
-      VALUES (
-        ${freelancer_id},
-        ${title},
-        ${description},
-        ${category},
-        ${subcategory},
-        ${tags}
-      )
+      INSERT INTO gigs (freelancer_id, title, description, category, subcategory, tags)
+      VALUES (${freelancer_id}, ${title}, ${description}, ${category}, ${subcategory}, ${tags})
       RETURNING id
     `;
 
     const gigId = gig.id;
 
-    for (const pkg of packages) {
-      await sql`
-        INSERT INTO gigpackage (
-          gig_id,
-          package_type,
-          price,
-          description,
-          delivery_days,
-          revisions
-        )
-        VALUES (
-          ${gigId},
-          ${pkg.type},
-          ${pkg.price},
-          ${pkg.description},
-          ${pkg.delivery_days},
-          ${pkg.revisions}
-        )
-      `;
-    }
-    for (const item of media) {
-      await sql`
-        INSERT INTO gigmedia (
-          gig_id,
-          media_url,
-          media_type
-        )
-        VALUES (
-          ${gigId},
-          ${item.url},
-          ${item.type}
-        )
-      `;
-    }
+    // 2. Parallel Insert for Packages 
+    // This fires all inserts at once over the HTTP connection pool
+    const packagePromises = packages.map(pkg => sql`
+      INSERT INTO gigpackage (gig_id, package_type, price, description, delivery_days, revisions)
+      VALUES (${gigId}, ${pkg.type}, ${pkg.price}, ${pkg.description}, ${pkg.delivery_days}, ${pkg.revisions})
+    `);
+
+    // 3. Parallel Insert for Media
+    const mediaPromises = media.map(item => sql`
+      INSERT INTO gigmedia (gig_id, media_url, media_type)
+      VALUES (${gigId}, ${item.url}, ${item.type})
+    `);
+
+    // Wait for all sub-inserts to complete simultaneously
+    await Promise.all([...packagePromises, ...mediaPromises]);
 
     await sql`COMMIT`;
 
-    return res.status(201).json({
-      message: "Gig created successfully"
-    });
+    return res.status(201).json({ message: "Gig created successfully", gigId });
 
   } catch (error) {
     await sql`ROLLBACK`;
-    console.error(error);
-
-    return res.status(500).json({
-      message: error.message
-    });
+    console.error("Error creating gig:", error);
+    return res.status(500).json({ message: error.message });
   }
 };
 
