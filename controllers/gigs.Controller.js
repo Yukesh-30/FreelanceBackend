@@ -1,6 +1,7 @@
 import sql from "../config/dbConfig.js"
-import {z} from "zod"
+import { z } from "zod"
 import { internelServerError } from "../helper/response.js";
+import cloudinary from "../config/cloudnary.config.js";
 
 const updateGigSchema = z.object({
   title: z.string().min(5).max(255),
@@ -10,15 +11,15 @@ const updateGigSchema = z.object({
 }).partial();
 
 const packageSchema = z.object({
-  package_type : z.enum(['BASIC','STANDARD','PREMIUM']),
-  price : z.number(),
-  description : z.string().min(10).max(255),
-  delivery_days : z.number(),
-  revisions : z.number()
+  package_type: z.enum(['BASIC', 'STANDARD', 'PREMIUM']),
+  price: z.number(),
+  description: z.string().min(10).max(255),
+  delivery_days: z.number(),
+  revisions: z.number()
 }).partial();
 
 const mediaSchema = z.object({
-  media_url : z.string().url()
+  media_url: z.string().url()
 })
 
 const createGigSchema = z.object({
@@ -50,8 +51,8 @@ const createGigSchema = z.object({
 
 
 const getAllGigs = async (req, res) => {
-    try {
-        const result = await sql`SELECT json_agg(
+  try {
+    const result = await sql`SELECT json_agg(
                                     json_build_object(
                                         'id', g.id,
                                         'freelancer_id' : g.freelancer_id,
@@ -60,6 +61,7 @@ const getAllGigs = async (req, res) => {
                                         'category', g.category,
                                         'subcategory', g.subcategory,
                                         'tags', g.tags,
+                                        'cover_pic_url', g.cover_image_url,
                                         'created_at', g.created_at,
 
                                         'packages', (
@@ -92,32 +94,32 @@ const getAllGigs = async (req, res) => {
                                 ) AS gigs
                                 FROM gigs g;`;
 
-        const gigs = result[0].gigs || [];
+    const gigs = result[0].gigs || [];
 
-        if (gigs.length === 0) {
-            return res.status(404).json({
-                message: "No gigs found"
-            });
-        }
-
-        return res.status(200).json({
-            message: "Gigs found",
-            gigs
-        });
-
-    } catch (error) {
-        return res.status(500).json({
-            message: internelServerError
-        });
+    if (gigs.length === 0) {
+      return res.status(404).json({
+        message: "No gigs found"
+      });
     }
+
+    return res.status(200).json({
+      message: "Gigs found",
+      gigs
+    });
+
+  } catch (error) {
+    return res.status(500).json({
+      message: internelServerError
+    });
+  }
 };
 
 
 const getGigById = async (req, res) => {
-    const id = req.params.id;
+  const id = req.params.id;
 
-    try {
-        const result = await sql`
+  try {
+    const result = await sql`
             SELECT json_build_object(
                 'id', g.id,
                 'freelancer_id', g.freelancer_id,
@@ -126,6 +128,7 @@ const getGigById = async (req, res) => {
                 'category', g.category,
                 'subcategory', g.subcategory,
                 'tags', g.tags,
+                'cover_pic_url', g.cover_image_url,
                 'created_at', g.created_at,
 
                 'packages', (
@@ -160,32 +163,32 @@ const getGigById = async (req, res) => {
             WHERE g.id = ${id};
         `;
 
-        const gig = result[0]?.gig;
+    const gig = result[0]?.gig;
 
-        if (!gig) {
-            return res.status(404).json({
-                message: "Gig not found"
-            });
-        }
-
-        return res.status(200).json({
-            gig
-        });
-
-    } catch (error) {
-        console.error(error);
-        return res.status(500).json({
-            message: error.message
-        });
+    if (!gig) {
+      return res.status(404).json({
+        message: "Gig not found"
+      });
     }
+
+    return res.status(200).json({
+      gig
+    });
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      message: error.message
+    });
+  }
 };
 
 
 const getGigsByFreelancerId = async (req, res) => {
-    const id = req.params.id;
+  const id = req.params.id;
   console.log(id)
-    try {
-        const result = await sql`
+  try {
+    const result = await sql`
             SELECT json_build_object(
                 'id', g.id,
                 'freelancer_id', g.freelancer_id,
@@ -194,6 +197,7 @@ const getGigsByFreelancerId = async (req, res) => {
                 'category', g.category,
                 'subcategory', g.subcategory,
                 'tags', g.tags,
+                'cover_pic_url', g.cover_image_url,
                 'created_at', g.created_at,
 
                 'packages', (
@@ -228,28 +232,39 @@ const getGigsByFreelancerId = async (req, res) => {
             WHERE g.freelancer_id = ${id};
         `;
 
-        const gig = result[0]?.gig;
+    const gigs = result.map(row => row.gig);
 
-        if (!gig) {
-            return res.status(404).json({
-                message: "Gig not found"
-            });
-        }
-
-        return res.status(200).json({
-            gig
-        });
-
-    } catch (error) {
-        console.error(error);
-        return res.status(500).json({
-            message: error.message
-        });
+    if (!gigs) {
+      return res.status(404).json({
+        message: "Gig not found"
+      });
     }
+
+    return res.status(200).json({
+      gigs
+    });
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      message: error.message
+    });
+  }
 };
 
 
 const createGig = async (req, res) => {
+  // Parse fields if they are sent as strings via FormData
+  ['tags', 'packages', 'media'].forEach(field => {
+    if (typeof req.body[field] === 'string') {
+      try {
+        req.body[field] = JSON.parse(req.body[field]);
+      } catch (e) {
+        console.error(`Error parsing ${field}:`, e);
+      }
+    }
+  });
+
   const validation = createGigSchema.safeParse(req.body);
 
   if (!validation.success) {
@@ -269,6 +284,20 @@ const createGig = async (req, res) => {
     media
   } = validation.data;
 
+  let cover_image_url = null;
+  if (req.file) {
+    try {
+      const result = await cloudinary.uploader.upload(req.file.path, {
+        folder: "gigs/cover_images",
+        resource_type: "image"
+      });
+      cover_image_url = result.secure_url;
+    } catch (uploadError) {
+      console.error("Cloudinary upload error:", uploadError);
+      return res.status(500).json({ message: "Failed to upload cover image" });
+    }
+  }
+
   try {
     await sql`BEGIN`;
 
@@ -279,7 +308,8 @@ const createGig = async (req, res) => {
         description,
         category,
         subcategory,
-        tags
+        tags,
+        cover_image_url
       )
       VALUES (
         ${freelancer_id},
@@ -287,7 +317,8 @@ const createGig = async (req, res) => {
         ${description},
         ${category},
         ${subcategory},
-        ${tags}
+        ${tags},
+        ${cover_image_url}
       )
       RETURNING id
     `;
@@ -345,19 +376,19 @@ const createGig = async (req, res) => {
   }
 };
 
-const deleteGigById = async (req,res)=>{
-    const id = req.params.id
+const deleteGigById = async (req, res) => {
+  const id = req.params.id
 
-    try {
-        await sql`DELETE from gigs where id=${id}`
-        return res.status(200).json({
-            message : "Gig deleted successfully"
-        })
-    } catch (error) {
-        return res.status(500).json({
-            message : internelServerError
-        })
-    }
+  try {
+    await sql`DELETE from gigs where id=${id}`
+    return res.status(200).json({
+      message: "Gig deleted successfully"
+    })
+  } catch (error) {
+    return res.status(500).json({
+      message: internelServerError
+    })
+  }
 }
 
 const updateGig = async (req, res) => {
@@ -408,170 +439,171 @@ const getCloudinaryType = (url) => {
 
   if (url.includes('/video/upload/')) return 'VIDEO';
   if (url.includes('/image/upload/')) return 'IMAGE';
-  if (url.includes('/raw/upload/')) return 'RAW'; 
+  if (url.includes('/raw/upload/')) return 'RAW';
 
   const videoExtensions = ['.mp4', '.mov', '.webm', '.mkv', '.avi'];
   const isVideo = videoExtensions.some(ext => url.toLowerCase().endsWith(ext));
-  
+
   return isVideo ? 'VIDEO' : 'IMAGE';
 };
 
-const postMedia = async (req,res)=>{
-    const id = req.params.id
+const postMedia = async (req, res) => {
+  const id = req.params.id
 
-    const validation = mediaSchema.safeParse(req.body)
+  const validation = mediaSchema.safeParse(req.body)
 
-    if(!validation.success){
-      return res.status(400).json({
-        message : "Bad request Format"
-      })
-    }
+  if (!validation.success) {
+    return res.status(400).json({
+      message: "Bad request Format"
+    })
+  }
 
-    try {
-      const {media_url} = validation.data
+  try {
+    const { media_url } = validation.data
 
-      const media_type = getCloudinaryType(media_url)
-      
-      await sql`
+    const media_type = getCloudinaryType(media_url)
+
+    await sql`
         INSERT INTO gigmedia (gig_id, media_url, media_type) 
         VALUES (${id}, ${media_url}, ${media_type})
       `;
 
-      return res.status(201).json({
-        message: "Media inserted sucessfully"
-      })
-    } catch (error) {
-       return res.status(500).json({
-        message : internelServerError
-       })
-    }
+    return res.status(201).json({
+      message: "Media inserted sucessfully"
+    })
+  } catch (error) {
+    return res.status(500).json({
+      message: internelServerError
+    })
+  }
 
 }
 
-const deleteMediaById = async (req,res) =>{
-    const {id} = req.body
+const deleteMediaById = async (req, res) => {
+  const { id } = req.body
 
-    
 
-    try {
-      const media = await sql`SELECT * FROM gigmedia where id=${id}`
-      console.log(media)
-      if(media.length===0){
-        return res.status(404).json({
-          messagec : "Media not found"
-        })
-      }
 
-      await sql`DELETE FROM gigmedia where id=${id}`
-
-      return res.status(200).json({
-        message : "Media deleted successfully"
+  try {
+    const media = await sql`SELECT * FROM gigmedia where id=${id}`
+    console.log(media)
+    if (media.length === 0) {
+      return res.status(404).json({
+        messagec: "Media not found"
       })
-      
-    } catch (error) {
-       return res.status(500).json({
-        message : internelServerError
-       })
     }
+
+    await sql`DELETE FROM gigmedia where id=${id}`
+
+    return res.status(200).json({
+      message: "Media deleted successfully"
+    })
+
+  } catch (error) {
+    return res.status(500).json({
+      message: internelServerError
+    })
+  }
 }
 
 //package update
 //create pakage
 
-const createPackage = async (req,res) =>{
-    const id = req.params.id
+const createPackage = async (req, res) => {
+  const id = req.params.id
 
-    const validation = packageSchema.safeParse(req.body)
+  const validation = packageSchema.safeParse(req.body)
 
-    if(!validation.success){
-      return res.status(400).json({
-        message : "Bad request format"
-      })
-    }
+  if (!validation.success) {
+    return res.status(400).json({
+      message: "Bad request format"
+    })
+  }
 
-    try {
-        const {package_type,price,description,delivery_days,revisions} = validation.data
+  try {
+    const { package_type, price, description, delivery_days, revisions } = validation.data
 
-      await sql`INSERT INTO gigpackage(gig_id,
+    await sql`INSERT INTO gigpackage(gig_id,
                   package_type,
                   price,
                   description,
                   delivery_days,
                   revisions) VALUES(${id},${package_type},${price},${description},${delivery_days},${revisions})`
 
-      return res.status(201).json({
-        message : "Package created successfully"
-      })
-    } catch (error) {
-      return res.status(500).json({
-        message : internelServerError
-      })
-    }
+    return res.status(201).json({
+      message: "Package created successfully"
+    })
+  } catch (error) {
+    return res.status(500).json({
+      message: internelServerError
+    })
+  }
 }
 //delete the pack by id
 
-const deletePackageById = async (req,res) =>{
+const deletePackageById = async (req, res) => {
   const id = req.params.id
 
   try {
     const packages = await sql`SELECT * FROM gigpackage where id=${id}`
-    if(packages.length===0){
+    if (packages.length === 0) {
       return res.status(404).json({
-        message : "Package not found"
+        message: "Package not found"
       })
-    } 
+    }
 
     await sql`DELETE FROM gigpackage where id=${id}`
     res.status(200).json({
-      message : "Package deleted Successfully"
+      message: "Package deleted Successfully"
     })
   } catch (error) {
     return res.status(500).json({
-        message : internelServerError
-      })
+      message: internelServerError
+    })
   }
 
 }
 
-const updatePackageById = async (req,res)=>{
-   const id = req.params.id
-   const validation = packageSchema.safeParse(req.body)
-   if(!validation.success){
-      return res.status(400).json({
-        message : "Bad request format"
-      })
-   }
+const updatePackageById = async (req, res) => {
+  const id = req.params.id
+  const validation = packageSchema.safeParse(req.body)
+  if (!validation.success) {
+    return res.status(400).json({
+      message: "Bad request format"
+    })
+  }
 
-   try {
-     const pakages = await sql`SELECT * FROM gigpackage where id=${id}`
-      const existingPackage = pakages[0]
-      let {package_type,price,description,delivery_days,revisions} = validation.data
+  try {
+    const pakages = await sql`SELECT * FROM gigpackage where id=${id}`
+    const existingPackage = pakages[0]
+    let { package_type, price, description, delivery_days, revisions } = validation.data
 
-      package_type = package_type ?? existingPackage.package_type
-      price = price ?? existingPackage.price
-      description = description ?? existingPackage.description
-      delivery_days = delivery_days ?? existingPackage.delivery_days
-      revisions = revisions ?? existingPackage.revisions
+    package_type = package_type ?? existingPackage.package_type
+    price = price ?? existingPackage.price
+    description = description ?? existingPackage.description
+    delivery_days = delivery_days ?? existingPackage.delivery_days
+    revisions = revisions ?? existingPackage.revisions
 
-      await sql`UPDATE gigpackage SET package_type=${package_type},price=${price},description=${description},delivery_days=${delivery_days},revisions=${revisions} where id=${id}`
+    await sql`UPDATE gigpackage SET package_type=${package_type},price=${price},description=${description},delivery_days=${delivery_days},revisions=${revisions} where id=${id}`
 
-      return res.status(200).json({
-        message:"Package updated successfully"
-      })
-    
-   } catch (error) {
-     return res.status(500).json({
-      message : internelServerError
-     })
-   }
-   
-   
+    return res.status(200).json({
+      message: "Package updated successfully"
+    })
+
+  } catch (error) {
+    return res.status(500).json({
+      message: internelServerError
+    })
+  }
+
+
 
 
 }
 
 
-export {getAllGigs,
+export {
+  getAllGigs,
   getGigById,
   createGig,
   deleteGigById,
@@ -581,4 +613,5 @@ export {getAllGigs,
   deleteMediaById,
   createPackage,
   deletePackageById,
-  updatePackageById}
+  updatePackageById
+}
