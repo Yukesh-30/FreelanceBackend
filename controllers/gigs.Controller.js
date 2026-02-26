@@ -281,21 +281,28 @@ const createGig = async (req, res) => {
   const validation = createGigSchema.safeParse(req.body);
 
   if (!validation.success) {
-    return res.status(400).json({
-      message: validation.error.errors
-    });
+    return res.status(400).json({ message: validation.error.errors });
   }
 
   const {
-    freelancer_id,
-    title,
-    description,
-    category,
-    subcategory,
-    tags,
-    packages,
-    media
+    freelancer_id, title, description, category, subcategory, tags, packages, media
   } = validation.data;
+
+  let cover_image_url = null;
+  const coverFile = req.files && req.files['cover_pic'] ? req.files['cover_pic'][0] : req.file;
+
+  if (coverFile) {
+    try {
+      const result = await cloudinary.uploader.upload(coverFile.path, {
+        folder: "gigs/cover_images",
+        resource_type: "image"
+      });
+      cover_image_url = result.secure_url;
+    } catch (uploadError) {
+      console.error("Cloudinary upload error:", uploadError);
+      return res.status(500).json({ message: "Failed to upload cover image" });
+    }
+  }
 
   let cover_image_url = null;
   const coverFile = req.files && req.files['cover_pic'] ? req.files['cover_pic'][0] : req.file;
@@ -316,6 +323,7 @@ const createGig = async (req, res) => {
   try {
     await sql`BEGIN`;
 
+    // 1. Insert the main Gig (Must be first to get the ID)
     const [gig] = await sql`
       INSERT INTO gigs (
         freelancer_id,
@@ -392,17 +400,12 @@ const createGig = async (req, res) => {
 
     await sql`COMMIT`;
 
-    return res.status(201).json({
-      message: "Gig created successfully"
-    });
+    return res.status(201).json({ message: "Gig created successfully", gigId });
 
   } catch (error) {
     await sql`ROLLBACK`;
-    console.error(error);
-
-    return res.status(500).json({
-      message: error.message
-    });
+    console.error("Error creating gig:", error);
+    return res.status(500).json({ message: error.message });
   }
 };
 
