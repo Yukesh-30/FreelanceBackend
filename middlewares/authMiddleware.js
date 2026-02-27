@@ -1,6 +1,6 @@
 import express from "express";
 import jwt from "jsonwebtoken"
-import sql from "../db/dbConfig.js";
+import sql from "../config/dbConfig.js";
 //This will authenticate the token when user login
 const protect = async (req, res, next) => {
     try {

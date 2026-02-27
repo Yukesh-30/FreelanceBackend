@@ -1,5 +1,5 @@
 import { is } from "zod/locales";
-import sql from "../db/dbConfig.js";
+import sql from "../config/dbConfig.js";
 import { z } from "zod";
 
 
