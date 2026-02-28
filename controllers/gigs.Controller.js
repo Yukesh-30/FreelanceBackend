@@ -68,7 +68,7 @@ const getAllGigs = async (req, res) => {
     const result = await sql`SELECT json_agg(
                                     json_build_object(
                                         'id', g.id,
-                                        'freelancer_id' : g.freelancer_id,
+                                        'freelancer_id' , g.freelancer_id,
                                         'title', g.title,
                                         'description', g.description,
                                         'category', g.category,

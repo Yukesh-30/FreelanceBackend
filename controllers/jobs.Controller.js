@@ -1,6 +1,7 @@
 import { is } from "zod/locales";
 import sql from "../config/dbConfig.js";
 import { z } from "zod";
+import {internelServerError} from '../helper/response.js'
 
 
 export const createJobSchema = z.object({
@@ -214,3 +215,25 @@ export const deleteJob = async (req, res) => {
     return res.status(500).json({ message: "Server error" });
   }
 };
+
+
+//as of now no filter--future la add pagination and filters
+
+export const getAllJobs = async (req,res) =>{
+  try {
+     const jobs = await sql`SELECT * FROM jobs`
+
+     if(jobs.length===0){
+      return res.status(404).json({
+        message : "Jobs not found"
+      })
+     }
+     console.log(jobs)
+     return res.status(200).json({
+        jobs
+     })
+  } catch (error) {
+     return res.status(500).internelServerError
+  }  
+}
+

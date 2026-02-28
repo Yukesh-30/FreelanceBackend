@@ -1,5 +1,7 @@
 import express from "express"
 import { createGig, deleteGigById, getAllGigs, getGigById, postMedia, updateGig, deleteMediaById, createPackage, deletePackageById, updatePackageById, getGigsByFreelancerId } from "../../controllers/gigs.Controller.js";
+import { createGigOrder } from "../../controllers/contract.Controller.js";
+import { requireClient, protect } from "../../middlewares/authMiddleware.js";
 import upload from "../../middlewares/uploadMiddleware.js";
 
 const gigsRoute = express.Router()
@@ -24,6 +26,9 @@ gigsRoute.delete('/media', deleteMediaById)
 gigsRoute.post('/package/:id', createPackage)
 gigsRoute.delete('/package/:id', deletePackageById)
 gigsRoute.patch('/package/:id', updatePackageById)
+
+//orders (Flow B)
+gigsRoute.post('/:id/order',createGigOrder)
 
 
 export default gigsRoute
