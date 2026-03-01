@@ -94,7 +94,7 @@ const statusUpdate = async (req, res) => {
             UPDATE job_applications 
             SET status = ${newStatus}
             WHERE id = ${applicationId} 
-            RETURNING job_id, freelancer_id, proposed_rate
+            RETURNING job_id, freelancer_id, proposed_rate, estimated_days
         `;
 
         if (apps.length === 0) {
@@ -118,14 +118,16 @@ const statusUpdate = async (req, res) => {
                         job_id, 
                         total_amount, 
                         status, 
-                        start_date
+                        start_date,
+                        end_date
                     ) VALUES (
                         ${job.client_id}, 
                         ${application.freelancer_id}, 
                         ${application.job_id}, 
                         ${application.proposed_rate}, 
                         'ACTIVE', 
-                        NOW()
+                        NOW(),
+                        NOW() + (${application.estimated_days} || 0) * INTERVAL '1 day'
                     )
                 `;
             }
@@ -169,7 +171,7 @@ const acceptOrderSchema = z.object({
 
 const createGigOrder = async (req, res) => {
     const gig_id = req.params.id;
-    
+
 
     const validation = orderGigSchema.safeParse(req.body);
     if (!validation.success) {
@@ -179,7 +181,7 @@ const createGigOrder = async (req, res) => {
         });
     }
 
-    const { client_id,message, package_id, package_type } = validation.data;
+    const { client_id, message, package_id, package_type } = validation.data;
 
     try {
         // Fetch gig
@@ -258,14 +260,14 @@ const getFreelancerOrders = async (req, res) => {
 
 const updateGigOrderStatus = async (req, res) => {
     const order_id = req.params.id;
-    
+
 
     const validation = acceptOrderSchema.safeParse(req.body);
     if (!validation.success) {
         return res.status(400).json({ message: "Invalid status", errors: validation.error.errors });
     }
 
-    const { freelancer_id,status: newStatus } = validation.data;
+    const { freelancer_id, status: newStatus } = validation.data;
 
     try {
         await sql`BEGIN`;
@@ -320,14 +322,16 @@ const updateGigOrderStatus = async (req, res) => {
                 gig_id,
                 total_amount,
                 status,
-                start_date
+                start_date,
+                end_date
             ) VALUES (
                 ${order.client_id},
                 ${order.freelancer_id},
                 ${order.gig_id},
                 ${order.price_snapshot},
                 'ACTIVE',
-                NOW()
+                NOW(),
+                NOW() + (${order.delivery_days_snapshot} || 0) * INTERVAL '1 day'
             )
         `;
 
@@ -340,11 +344,49 @@ const updateGigOrderStatus = async (req, res) => {
     }
 };
 
+const getFreelancerApplications = async (req, res) => {
+    const freelancer_id = req.params.id;
+    try {
+        const applications = await sql`
+            SELECT ja.*, j.title as job_title 
+            FROM job_applications ja
+            JOIN jobs j ON ja.job_id = j.id
+            WHERE ja.freelancer_id = ${freelancer_id}
+            ORDER BY ja.created_at DESC
+        `;
+        return res.status(200).json({ applications });
+    } catch (error) {
+        console.error("Error fetching freelancer applications:", error);
+        return res.status(500).json({ message: internelServerError() });
+    }
+};
+
+const getFreelancerContracts = async (req, res) => {
+    const freelancer_id = req.params.id;
+    try {
+        const contracts = await sql`
+            SELECT c.*, j.title as job_title, g.title as gig_title 
+            FROM contracts c
+            LEFT JOIN jobs j ON c.job_id = j.id
+            LEFT JOIN gigs g ON c.gig_id = g.id
+            WHERE c.freelancer_id = ${freelancer_id} 
+              AND c.status = 'ACTIVE'
+            ORDER BY c.start_date ASC
+        `;
+        return res.status(200).json({ contracts });
+    } catch (error) {
+        console.error("Error fetching freelancer contracts:", error);
+        return res.status(500).json({ message: internelServerError() });
+    }
+};
+
 export {
     applyForJobById,
     getAllApplicationByJobId,
     statusUpdate,
     createGigOrder,
     getFreelancerOrders,
-    updateGigOrderStatus
+    updateGigOrderStatus,
+    getFreelancerApplications,
+    getFreelancerContracts
 }

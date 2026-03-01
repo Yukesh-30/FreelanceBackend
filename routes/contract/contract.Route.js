@@ -1,5 +1,5 @@
 import express from 'express'
-import { applyForJobById, getAllApplicationByJobId, statusUpdate } from '../../controllers/contract.Controller.js';
+import { applyForJobById, getAllApplicationByJobId, statusUpdate, getFreelancerApplications, getFreelancerContracts } from '../../controllers/contract.Controller.js';
 
 const contractRoute = express.Router()
 
@@ -7,5 +7,9 @@ const contractRoute = express.Router()
 contractRoute.post('/:id/apply', applyForJobById)
 contractRoute.get('/:id/applications', getAllApplicationByJobId)
 contractRoute.patch('/:id/status', statusUpdate)
+
+// New endpoints for Freelancer dashboard
+contractRoute.get('/freelancer/:id/applications', getFreelancerApplications)
+contractRoute.get('/freelancer/:id/contracts', getFreelancerContracts)
 
 export default contractRoute;
