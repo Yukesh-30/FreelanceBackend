@@ -429,7 +429,6 @@ const updateGig = async (req, res) => {
       return res.status(404).json({ message: "Gig not found" });
     }
 
-    // Use 'let' so we can reassign, OR merge into a new object
     let { title, description, category, subcategory } = validation.data;
 
     const finalTitle = title ?? existingGig.title;

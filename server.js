@@ -9,6 +9,7 @@ import clientRoute from "./routes/client/client.route.js";
 import jobsRoute from "./routes/jobs/jobs.route.js";
 import contractRoute from "./routes/contract/contract.Route.js";
 import ordersRoute from "./routes/orders/orders.route.js";
+import SubmissionRouter from "./routes/submission/submission.route.js";
 const app = express();
 const port = process.env.PORT || 3000
 app.use(cors())
@@ -24,6 +25,7 @@ app.use('/api/client', clientRoute)
 app.use('/api/jobs', jobsRoute)
 app.use('/api/contract', contractRoute)
 app.use('/api/orders', ordersRoute)
+app.use('/api/submission',SubmissionRouter)
 
 app.listen(port, (err) => {
     if (!err) {
