@@ -100,7 +100,7 @@ export const updateClientProfile = async (req, res) => {
 };
 
 export const getClientProfileByUserId = async (req, res) => {
-  const  userId  = req.params.id;
+  const userId = req.params.id;
 
   console.log(userId);
 

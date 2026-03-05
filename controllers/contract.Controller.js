@@ -398,6 +398,7 @@ const getFreelancerContracts = async (req, res) => {
             FROM contracts c
             LEFT JOIN jobs j ON c.job_id = j.id
             LEFT JOIN gigs g ON c.gig_id = g.id
+            LEFT JOIN users u ON c.client_id = u.id
             WHERE c.freelancer_id = ${freelancer_id} 
               AND c.status = 'ACTIVE'
             ORDER BY c.start_date ASC
@@ -413,10 +414,12 @@ const getClientContracts = async (req, res) => {
     const client_id = req.params.id;
     try {
         const contracts = await sql`
-            SELECT c.*, j.title as job_title, g.title as gig_title 
+            SELECT c.*, j.title as job_title, g.title as gig_title,
+                   u.full_name as freelancer_name, u.email as freelancer_email, u.profile_pic_url as freelancer_profile_pic 
             FROM contracts c
             LEFT JOIN jobs j ON c.job_id = j.id
             LEFT JOIN gigs g ON c.gig_id = g.id
+            LEFT JOIN users u ON c.freelancer_id = u.id
             WHERE c.client_id = ${client_id} 
               AND c.status = 'ACTIVE'
             ORDER BY c.start_date ASC

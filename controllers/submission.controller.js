@@ -8,7 +8,7 @@ const submitWork = async (req, res) => {
 
     const contractId = req.params.contractId
     const { message, waterMarkText } = req.body
-    
+
 
     if (!req.files || req.files.length === 0) {
         return res.status(400).json({
@@ -73,7 +73,7 @@ const submitWork = async (req, res) => {
             const watermarkedUrl = watermarkedUpload.secure_url
             watermarkedFiles.push(watermarkedUrl)
 
-            
+
         }
         await sql`
                 INSERT INTO submissionfiles
@@ -221,7 +221,7 @@ const getSingleSubmission = async (req, res) => {
                 }))
             })
         }
-        else{
+        else {
             return res.status(200).json({
                 ...submission,
                 files: files.map(file => ({
@@ -242,4 +242,4 @@ const getSingleSubmission = async (req, res) => {
 
 
 
-export { submitWork,viewSubmittedWork,updateStatusForSubmission,getSingleSubmission}
+export { submitWork, viewSubmittedWork, updateStatusForSubmission, getSingleSubmission }
