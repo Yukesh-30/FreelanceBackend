@@ -9,9 +9,19 @@ import clientRoute from "./routes/client/client.route.js";
 import jobsRoute from "./routes/jobs/jobs.route.js";
 import contractRoute from "./routes/contract/contract.Route.js";
 import ordersRoute from "./routes/orders/orders.route.js";
+import paymentsRoute from "./routes/payment/payment.routes.js";
+import { paymentWebhook } from "./controllers/payment.Controller.js";
+
 const app = express();
 const port = process.env.PORT || 3000
 app.use(cors())
+
+app.post(
+  "/api/payments/webhook",
+  express.raw({ type: "application/json" }),
+  paymentWebhook
+);
+
 app.use(express.json())
 
 dotenv.config()
@@ -24,6 +34,7 @@ app.use('/api/client', clientRoute)
 app.use('/api/jobs', jobsRoute)
 app.use('/api/contract', contractRoute)
 app.use('/api/orders', ordersRoute)
+app.use('/api/payments', paymentsRoute)
 
 app.listen(port, (err) => {
     if (!err) {

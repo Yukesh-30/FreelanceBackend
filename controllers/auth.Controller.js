@@ -30,33 +30,59 @@ sgMail.setApiKey(process.env.SEND_GRID_API_KEY)
 dotenv.config();
 
 const signUpController = async (req, res) => {
-    const validation = signUpSchema.safeParse(req.body);
-    if (!validation.success) {
-        return res.status(400).json({ message: validation.error.errors[0].message });
+  const validation = signUpSchema.safeParse(req.body);
+  if (!validation.success) {
+    return res.status(400).json({
+      message: validation.error.errors[0].message
+    });
+  }
+
+  const { email, password, role, fullName } = validation.data;
+
+  try {
+    // 1. Check if email exists
+    const existing = await sql`
+      SELECT id FROM users WHERE email = ${email}
+    `;
+
+    if (existing.length > 0) {
+      return res.status(409).json({
+        message: "Email already in use"
+      });
     }
 
-    const { email, password, role, fullName } = validation.data;
+    // 2. Hash password
+    const saltRounds = Number(process.env.HASH_SALT_VALUE || 10);
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-    try {
-        const existing = await sql`SELECT id FROM users WHERE email = ${email}`;
-        if (existing.length > 0) {
-            return res.status(409).json({ message: "Email already in use" });
-        }
+    // 3. Insert user and RETURN id (IMPORTANT)
+    const users = await sql`
+      INSERT INTO users (email, password_hash, role, full_name)
+      VALUES (${email}, ${hashedPassword}, ${role}, ${fullName})
+      RETURNING id
+    `;
+    console.log(role)
 
-        const saltRounds = parseInt(process.env.HASH_SALT_VALUE || '10');
-        const hashedPassword = await bcrypt.hash(password, saltRounds);
-        
-        await sql`
-            INSERT INTO users (email, password_hash, role, full_name) 
-            VALUES (${email}, ${hashedPassword}, ${role}, ${fullName})
-        `;
+    const userId = users[0].id; // ✅ Neon-style access
 
-        return res.status(201).json({ message: "User created successfully" });
-
-    } catch (error) {
-        console.error("Signup Error:", error); // Log for internal tracking
-        return res.status(500).json({ message: "Internal server error" });
+    // 4. Auto-create client profile
+    if (role === "CLIENT") {
+      await sql`
+        INSERT INTO client_profiles (user_id)
+        VALUES (${userId})
+      `;
     }
+
+    return res.status(201).json({
+      message: "User created successfully"
+    });
+
+  } catch (error) {
+    console.error("Signup Error:", error);
+    return res.status(500).json({
+      message: "Internal server error"
+    });
+  }
 };
 
 const logInController = async (req,res)=>{
