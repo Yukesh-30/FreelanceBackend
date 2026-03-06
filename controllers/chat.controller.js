@@ -12,9 +12,9 @@ export const getMessages = async (req, res) => {
     }
 
     try {
-        // Verify user is part of the contract
+        // Verify user is part of the contract and get both participants
         const contracts = await sql`
-            SELECT id FROM contracts 
+            SELECT id, client_id, freelancer_id FROM contracts 
             WHERE id = ${contract_id} 
               AND (client_id = ${user_id} OR freelancer_id = ${user_id})
         `;
@@ -23,7 +23,15 @@ export const getMessages = async (req, res) => {
             return res.status(403).json({ message: "You are not authorized to view this chat or contract doesn't exist" });
         }
 
-        const conversation = await Conversation.findOne({ contract_id });
+        const contract = contracts[0];
+
+        // Find conversation where participants array contains EXACTLY these two users 
+        // We use $all to ensure both are present. For strict exact match (no others), 
+        // we could also check size, but standard chats here only have 2 participants.
+        const conversation = await Conversation.findOne({
+            participants: { $all: [contract.client_id, contract.freelancer_id] }
+        });
+
         if (!conversation) {
             return res.status(200).json({ messages: [] }); // No messages yet
         }

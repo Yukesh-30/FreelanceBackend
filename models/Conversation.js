@@ -2,12 +2,11 @@ import mongoose from 'mongoose';
 
 const conversationSchema = new mongoose.Schema({
     contract_id: {
-        type: String, 
-        required: true,
-        unique: true,
+        type: String,
+        required: false, // Optional now
     },
     participants: [{
-        type: String, 
+        type: String,
     }],
 }, { timestamps: true });
 

@@ -23,19 +23,25 @@ export const initChatSocket = (io) => {
                 const contract = contracts[0];
 
                 // Create conversation document if not exists
-                let conversation = await Conversation.findOne({ contract_id });
+                // Now we search by participants array instead of just contract_id
+                let conversation = await Conversation.findOne({
+                    participants: { $all: [contract.client_id, contract.freelancer_id] }
+                });
+
                 if (!conversation) {
                     conversation = await Conversation.create({
-                        contract_id,
+                        contract_id, // keep a reference to the first contract that initiated it
                         participants: [contract.client_id, contract.freelancer_id]
                     });
                 }
 
-                // Join socket room
-                socket.join(contract_id);
-                console.log(`User ${user_id} joined room ${contract_id}`);
+                // Join socket room by conversation ID instead of contract ID
+                // to mix all contracts between these two users
+                const room_id = conversation._id.toString();
+                socket.join(room_id);
+                console.log(`User ${user_id} joined room ${room_id}`);
 
-                socket.emit('joined_room', { contract_id, conversation_id: conversation._id });
+                socket.emit('joined_room', { contract_id, conversation_id: room_id });
 
             } catch (error) {
                 console.error("Socket join error:", error);
@@ -57,8 +63,8 @@ export const initChatSocket = (io) => {
                     text
                 });
 
-                // Broadcast to everyone in the room
-                io.to(contract_id).emit('receive_message', newMessage);
+                // Broadcast to everyone in the conversation room
+                io.to(conversation_id).emit('receive_message', newMessage);
 
             } catch (error) {
                 console.error("Socket send message error:", error);
