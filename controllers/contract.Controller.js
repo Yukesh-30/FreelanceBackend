@@ -211,6 +211,31 @@ const createGigOrder = async (req, res) => {
             return res.status(400).json({ message: "No valid package found for this gig" });
         }
 
+        // Check if there is already a PENDING order for this gig by this client
+        const pendingOrders = await sql`
+            SELECT id FROM gig_orders 
+            WHERE client_id = ${client_id} 
+              AND gig_id = ${gig_id} 
+              AND status = 'PENDING'
+        `;
+
+        if (pendingOrders.length > 0) {
+            return res.status(400).json({ message: "You already have a pending order for this gig" });
+        }
+
+        // Check if there is already an ACTIVE contract for this gig by this client
+        const activeContracts = await sql`
+            SELECT id FROM contracts 
+            WHERE client_id = ${client_id} 
+              AND freelancer_id = ${gig.freelancer_id} 
+              AND gig_id = ${gig_id} 
+              AND status = 'ACTIVE'
+        `;
+
+        if (activeContracts.length > 0) {
+            return res.status(400).json({ message: "You already have an active contract for this gig" });
+        }
+
         const price_snapshot = pkg.price;
         const delivery_days_snapshot = pkg.delivery_days;
         const status = 'PENDING';
@@ -243,7 +268,11 @@ const createGigOrder = async (req, res) => {
 };
 
 const getFreelancerOrders = async (req, res) => {
-    const freelancer_id = req.body.freelancer_id;
+    const freelancer_id = req.query.freelancer_id; // Changed from req.body to req.query for GET request
+
+    if (!freelancer_id) {
+        return res.status(400).json({ message: "freelancer_id is required" });
+    }
 
     try {
         const orders = await sql`SELECT * FROM gig_orders WHERE freelancer_id = ${freelancer_id}`;
@@ -331,7 +360,7 @@ const updateGigOrderStatus = async (req, res) => {
                 ${order.price_snapshot},
                 'ACTIVE',
                 NOW(),
-                NOW() + (${order.delivery_days_snapshot} || 0) * INTERVAL '1 day'
+                NOW() + (COALESCE(${order.delivery_days_snapshot}::int, 0) * INTERVAL '1 day')
             )
         `;
 
@@ -369,6 +398,7 @@ const getFreelancerContracts = async (req, res) => {
             FROM contracts c
             LEFT JOIN jobs j ON c.job_id = j.id
             LEFT JOIN gigs g ON c.gig_id = g.id
+            LEFT JOIN users u ON c.client_id = u.id
             WHERE c.freelancer_id = ${freelancer_id} 
               AND c.status = 'ACTIVE'
             ORDER BY c.start_date ASC
@@ -376,6 +406,27 @@ const getFreelancerContracts = async (req, res) => {
         return res.status(200).json({ contracts });
     } catch (error) {
         console.error("Error fetching freelancer contracts:", error);
+        return res.status(500).json({ message: internelServerError() });
+    }
+};
+
+const getClientContracts = async (req, res) => {
+    const client_id = req.params.id;
+    try {
+        const contracts = await sql`
+            SELECT c.*, j.title as job_title, g.title as gig_title,
+                   u.full_name as freelancer_name, u.email as freelancer_email, u.profile_pic_url as freelancer_profile_pic 
+            FROM contracts c
+            LEFT JOIN jobs j ON c.job_id = j.id
+            LEFT JOIN gigs g ON c.gig_id = g.id
+            LEFT JOIN users u ON c.freelancer_id = u.id
+            WHERE c.client_id = ${client_id} 
+              AND c.status = 'ACTIVE'
+            ORDER BY c.start_date ASC
+        `;
+        return res.status(200).json({ contracts });
+    } catch (error) {
+        console.error("Error fetching client contracts:", error);
         return res.status(500).json({ message: internelServerError() });
     }
 };
@@ -388,5 +439,6 @@ export {
     getFreelancerOrders,
     updateGigOrderStatus,
     getFreelancerApplications,
-    getFreelancerContracts
+    getFreelancerContracts,
+    getClientContracts
 }
