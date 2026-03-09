@@ -28,8 +28,6 @@ const submitWork = async (req, res) => {
 
         const submissionId = submission.id
 
-        const watermark = createTextWatermark(waterMarkText)
-
         const originalFiles = []
         const watermarkedFiles = []
 
@@ -42,6 +40,9 @@ const submitWork = async (req, res) => {
 
             const originalUrl = originalUpload.secure_url
             originalFiles.push(originalUrl)
+
+            const metadata = await sharp(file.path).metadata()
+            const watermark = createTextWatermark(waterMarkText, metadata.width, metadata.height)
 
             const watermarkedBuffer = await sharp(file.path)
                 .composite([
