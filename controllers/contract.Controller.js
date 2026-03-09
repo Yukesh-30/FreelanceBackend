@@ -127,7 +127,7 @@ const statusUpdate = async (req, res) => {
                         ${application.proposed_rate}, 
                         'ACTIVE', 
                         NOW(),
-                        NOW() + (${application.estimated_days} || 0) * INTERVAL '1 day'
+                        NOW() + (COALESCE(${application.estimated_days}, 0) * INTERVAL '1 day')
                     )
                 `;
             }
