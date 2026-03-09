@@ -127,6 +127,7 @@ const viewSubmittedWork = async (req, res) => {
                     submission_id: submission.id,
                     message: submission.message,
                     status: submission.status,
+                    feedback: submission.client_feedback,
                     files: files.map(file => ({
                         download_url: file.original_url
                     })),
@@ -139,6 +140,7 @@ const viewSubmittedWork = async (req, res) => {
                     submission_id: submission.id,
                     message: submission.message,
                     status: submission.status,
+                    feedback: submission.client_feedback,
                     files: files.map(file => ({
                         preview_url: file.watermarked_url
                     })),
