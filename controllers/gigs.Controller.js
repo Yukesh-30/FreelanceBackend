@@ -64,66 +64,81 @@ const createGigSchema = z.object({
 
 
 const getAllGigs = async (req, res) => {
+
   try {
-    const result = await sql`SELECT json_agg(
-                                    json_build_object(
-                                        'id', g.id,
-                                        'freelancer_id' , g.freelancer_id,
-                                        'title', g.title,
-                                        'description', g.description,
-                                        'category', g.category,
-                                        'subcategory', g.subcategory,
-                                        'tags', g.tags,
-                                        'cover_pic_url', g.cover_image_url,
-                                        'created_at', g.created_at,
 
-                                        'packages', (
-                                            SELECT COALESCE(json_agg(
-                                                json_build_object(
-                                                    'id', p.id,
-                                                    'type', p.package_type,
-                                                    'price', p.price,
-                                                    'description', p.description,
-                                                    'delivery_days', p.delivery_days,
-                                                    'revisions', p.revisions
-                                                )
-                                            ), '[]'::json)
-                                            FROM gigpackage p
-                                            WHERE p.gig_id = g.id
-                                        ),
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
 
-                                        'media', (
-                                            SELECT COALESCE(json_agg(
-                                                json_build_object(
-                                                    'id', m.id,
-                                                    'url', m.media_url,
-                                                    'type', m.media_type
-                                                )
-                                            ), '[]'::json)
-                                            FROM gigmedia m
-                                            WHERE m.gig_id = g.id
-                                        )
-                                    )
-                                ) AS gigs
-                                FROM gigs g;`;
+    const offset = (page - 1) * limit;
 
-    const gigs = result[0].gigs || [];
+    const gigs = await sql`
+      SELECT
+        g.id,
+        g.freelancer_id,
+        g.title,
+        g.description,
+        g.category,
+        g.subcategory,
+        g.tags,
+        g.cover_image_url,
+        g.created_at,
 
-    if (gigs.length === 0) {
-      return res.status(404).json({
-        message: "No gigs found"
-      });
-    }
+        (
+          SELECT COALESCE(json_agg(
+            json_build_object(
+              'id', p.id,
+              'type', p.package_type,
+              'price', p.price,
+              'description', p.description,
+              'delivery_days', p.delivery_days,
+              'revisions', p.revisions
+            )
+          ), '[]'::json)
+          FROM gigpackage p
+          WHERE p.gig_id = g.id
+        ) AS packages,
+
+        (
+          SELECT COALESCE(json_agg(
+            json_build_object(
+              'id', m.id,
+              'url', m.media_url,
+              'type', m.media_type
+            )
+          ), '[]'::json)
+          FROM gigmedia m
+          WHERE m.gig_id = g.id
+        ) AS media
+
+      FROM gigs g
+      ORDER BY g.created_at DESC
+      LIMIT ${limit}
+      OFFSET ${offset}
+    `;
+
+    const totalCountResult = await sql`
+      SELECT COUNT(*) FROM gigs
+    `;
+
+    const total = parseInt(totalCountResult[0].count);
 
     return res.status(200).json({
-      message: "Gigs found",
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
       gigs
     });
 
   } catch (error) {
+
+    console.error(error);
+
     return res.status(500).json({
       message: internelServerError
     });
+
   }
 };
 

@@ -217,23 +217,50 @@ export const deleteJob = async (req, res) => {
 };
 
 
-//as of now no filter--future la add pagination and filters
+export const getAllJobs = async (req, res) => {
 
-export const getAllJobs = async (req,res) =>{
   try {
-     const jobs = await sql`SELECT * FROM jobs`
 
-     if(jobs.length===0){
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+
+    const offset = (page - 1) * limit;
+
+    const jobs = await sql`
+      SELECT *
+      FROM jobs
+      ORDER BY created_at DESC
+      LIMIT ${limit}
+      OFFSET ${offset}
+    `;
+
+    const totalCount = await sql`
+      SELECT COUNT(*) FROM jobs
+    `;
+
+    const total = parseInt(totalCount[0].count);
+
+    if (jobs.length === 0) {
       return res.status(404).json({
-        message : "Jobs not found"
-      })
-     }
-     console.log(jobs)
-     return res.status(200).json({
-        jobs
-     })
-  } catch (error) {
-     return res.status(500).internelServerError
-  }  
-}
+        message: "Jobs not found"
+      });
+    }
 
+    return res.status(200).json({
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+      jobs
+    });
+
+  } catch (error) {
+
+    console.error(error);
+
+    return res.status(500).json({
+      message: internelServerError
+    });
+
+  }
+};
