@@ -71,8 +71,24 @@ const signUpController = async (req, res) => {
         INSERT INTO client_profiles (user_id)
         VALUES (${userId})
       `;
+    } else if (role === "FREELANCER") {
+      await sql`
+        INSERT INTO freelancer_profiles (user_id)
+        VALUES (${userId})
+      `;
     }
 
+    await sql`
+    WITH new_ledger AS (
+     INSERT INTO ledger_accounts (id, user_id, account_type)
+     VALUES (gen_random_uuid(), ${userId}, 'USER_WALLET')
+     RETURNING id
+    )
+    INSERT INTO wallets (id, user_id, ledger_account_id)
+    SELECT gen_random_uuid(), ${userId}, id
+    FROM new_ledger
+    `;
+    
     return res.status(201).json({
       message: "User created successfully"
     });

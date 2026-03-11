@@ -18,6 +18,7 @@ const getFreelancerDetails = async (req, res) => {
         const users = await sql`SELECT * FROM freelancer_profiles where user_id=${id}`
 
         if (users.length === 0) {
+            console.log("Freelancer not found for ID:", id);
             return res.status(404).json({
                 message: "User not found"
             })

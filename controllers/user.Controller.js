@@ -15,6 +15,7 @@ const userProfileDetails = async (req, res) => {
         const userDetail = await sql`SELECT * FROM users where id=${userId}`;
 
         if (userDetail.length === 0) {
+            console.log("User not found for ID:", userId); 
             return res.status(404).json({
                 message: "User not found"
             });

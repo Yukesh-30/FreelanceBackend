@@ -192,11 +192,6 @@ export const paymentWebhook = async (req, res) => {
         (${escrowAccountId}, ${amount}, 'CREDIT', ${contractId}, ${escrowId}, 'Funds locked in escrow')
       `;
 
-      await sql`
-        UPDATE contracts
-        SET status = 'FUNDED'
-        WHERE id = ${contractId}
-      `;
 
     }
 
@@ -308,6 +303,22 @@ export const releaseEscrow = async (req, res) => {
     if (escrow.length === 0) {
       await sql`ROLLBACK`;
       return res.status(400).json({ message: "No escrow" });
+    }
+
+    // Guard: require at least one approved submission before releasing funds
+    const approvedSubmission = await sql`
+      SELECT id
+      FROM submissions
+      WHERE contract_id = ${contractId}
+      AND status = 'APPROVED'
+      LIMIT 1
+    `;
+
+    if (approvedSubmission.length === 0) {
+      await sql`ROLLBACK`;
+      return res.status(400).json({
+        message: "No approved submission. Approve the freelancer's work before releasing funds."
+      });
     }
 
     const amount = escrow[0].amount;
